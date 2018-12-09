@@ -3,14 +3,22 @@ const jwt = require("jsonwebtoken");
 const { randomBytes } = require("crypto");
 const { promisify } = require("util");
 const { transport, emailTemplate } = require("../mail");
+const { hasPermission } = require("../utils");
 const Mutations = {
   async createItem(parent, args, ctx, info) {
     // TODO: Check if they are logged in
-
+    if (!ctx.request.userId) {
+      throw new Error("You must be logged in to do that");
+    }
     //ctx.db contains all mutations and query methods in generated prisma.graphql
     const item = await ctx.db.mutation.createItem(
       {
         data: {
+          user: {
+            connect: {
+              id: ctx.request.userId
+            }
+          },
           ...args
         }
       },
@@ -163,6 +171,31 @@ const Mutations = {
       maxAge: 1000 * 60 * 60 * 24 * 365 // 1 year cookie
     });
     //return user
+    return updatedUser;
+  },
+  async updatePermissions(parent, { userId, permissions }, ctx, info) {
+    //Check if they are logged in
+    if (!ctx.request.userId) {
+      throw new Error("You must be logged in to do that");
+    }
+    const currentUser = await ctx.db.query.user(
+      { where: { id: ctx.request.userId } },
+      info
+    );
+    hasPermission(currentUser, ["ADMIN", "PERMISSIONUPDATE"]);
+
+    //update permissions
+    const updatedUser = await ctx.db.mutation.updateUser(
+      {
+        where: { id: userId },
+        data: {
+          permission: {
+            set: permissions
+          }
+        }
+      },
+      info
+    );
     return updatedUser;
   }
 };
